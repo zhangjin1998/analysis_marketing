@@ -31,6 +31,8 @@ from src.dataio import load_from_analyse_marketing, load_daily_candidates
 from src.breadth import compute_breadth
 from src.risk import position_scale
 from src.patterns import detect_patterns_on_candidates, detect_patterns_on_all, format_pattern_result
+from src.patterns_flag import scan_flag_platform_all  # 新增
+from src.themes import top_themes_with_leaders  # 新增
 
 # 加载环境变量
 load_dotenv()
@@ -245,10 +247,158 @@ def create_trading_agent():
             func=help_command,
             description="显示帮助信息和使用说明"
         ),
+        Tool(
+            name="query_flag_platform",
+            func=lambda: query_flag_platform_default(),
+            description="扫描‘翻倍后旗型/平台’，默认全市场+剔除ST，不强制突破，导出CSV并返回Top预览"
+        ),
+        Tool(
+            name="query_hot_themes",
+            func=lambda: query_hot_themes_default(),
+            description="查询题材/行业热点与龙头（近20/5日按中位收益排序）"
+        ),
     ]
     
     # 返回 (llm, tools, 用于后续处理)
     return llm, tools
+
+
+def _score_flag_platform_row(r):
+    def _safe(x, d):
+        try:
+            import pandas as pd
+            if pd.isna(x):
+                return d
+            return float(x)
+        except Exception:
+            return d
+    ret_up = _safe(r.get("ret_up"), 0.0)
+    width = _safe(r.get("width"), 1.0)
+    drawdown = _safe(r.get("drawdown"), 1.0)
+    r2 = _safe(r.get("r2"), 0.0)
+    vol_shrink_flag = _safe(r.get("vol_shrink_flag"), 1.0)
+    std_shrink_flag = _safe(r.get("std_shrink_flag"), 1.0)
+    std_shrink_base = _safe(r.get("std_shrink_base"), 1.0)
+    score = (
+        2.0 * ret_up
+        - 1.0 * width
+        - 0.5 * drawdown
+        + 0.5 * r2
+        - 0.3 * vol_shrink_flag
+        - 0.3 * min(std_shrink_flag, std_shrink_base)
+    )
+    return score
+
+
+def _format_flag_platform_output(df: pd.DataFrame, topk: int, out_csv: str) -> str:
+    if df is None or df.empty:
+        return "未命中任何标的"
+    cols_show = [c for c in ["code", "type", "ret_up", "width", "drawdown", "r2", "ma20_slope_pct", "score"] if c in df.columns]
+    head = df[cols_show].head(topk if topk and topk > 0 else 20)
+    text = [f"📋 翻倍后旗型/平台 命中 {len(df)} 只，展示前 {len(head)} 只:"]
+    for _, row in head.iterrows():
+        code = row.get("code", "-")
+        tp = row.get("type", "-")
+        sc = row.get("score", 0)
+        text.append(f"- {code} | {tp} | score={sc:.3f}")
+    if out_csv:
+        text.append(f"\n已保存: {out_csv}")
+    return "\n".join(text)
+
+
+def query_flag_platform_from_text(user_input: str) -> str:
+    user_lower = user_input.lower()
+    # 全市场/全部 开关
+    full_scan = any(k in user_lower for k in ["全部", "全市场", "全缓存", "全股票", "全部股票", "全量"]) or True
+    # ST 开关（默认剔除）
+    exclude_st = not any(k in user_lower for k in ["包含st", "保留st", "不剔除st", "含st"]) 
+    # 突破确认
+    require_breakout = any(k in user_lower for k in ["突破确认", "突破并放量", "放量突破", "有效突破"]) 
+    # topK 提取（可选）
+    import re
+    topk = 50
+    m = re.search(r"前(\d+)", user_input)
+    if not m:
+        m = re.search(r"top\s*(\d+)", user_lower)
+    if m:
+        try:
+            topk = int(m.group(1))
+        except Exception:
+            pass
+    # limit（如提及“只扫前N只”）
+    limit = 0
+    m2 = re.search(r"只扫(\d+)只", user_input)
+    if m2:
+        try:
+            limit = int(m2.group(1))
+        except Exception:
+            pass
+
+    df = scan_flag_platform_all(limit=limit, exclude_st=exclude_st, require_breakout=require_breakout)
+    if df is None or df.empty:
+        return "未命中任何标的"
+    df = df.copy()
+    df["score"] = df.apply(_score_flag_platform_row, axis=1)
+    df = df.sort_values(["score", "ret_up"], ascending=[False, False]).reset_index(drop=True)
+
+    # 导出
+    try:
+        os.makedirs('data/patterns', exist_ok=True)
+        tag = f"{'ALL' if full_scan else 'PART'}_{'noST' if exclude_st else 'withST'}"
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        out_csv = f'data/patterns/flag_platform_{tag}_{ts}.csv'
+        df.to_csv(out_csv, index=False, encoding='utf-8-sig')
+    except Exception:
+        out_csv = None
+
+    return _format_flag_platform_output(df, topk=topk, out_csv=out_csv)
+
+
+def query_flag_platform_default() -> str:
+    # 默认：全市场、剔除ST、不强制突破、topk=50
+    df = scan_flag_platform_all(limit=0, exclude_st=True, require_breakout=False)
+    if df is None or df.empty:
+        return "未命中任何标的"
+    df = df.copy()
+    df["score"] = df.apply(_score_flag_platform_row, axis=1)
+    df = df.sort_values(["score", "ret_up"], ascending=[False, False]).reset_index(drop=True)
+    try:
+        os.makedirs('data/patterns', exist_ok=True)
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        out_csv = f'data/patterns/flag_platform_noST_{ts}.csv'
+        df.to_csv(out_csv, index=False, encoding='utf-8-sig')
+    except Exception:
+        out_csv = None
+    return _format_flag_platform_output(df, topk=50, out_csv=out_csv)
+
+
+def query_hot_themes_default(top_k: int = 6, per_theme: int = 2) -> str:
+    try:
+        text = top_themes_with_leaders(top_k=top_k, per_theme=per_theme, limit_codes=0)
+        return text
+    except Exception as e:
+        return f"❌ 题材查询失败: {e}"
+
+
+def query_hot_themes_from_text(user_input: str) -> str:
+    import re
+    top_k = 6
+    per_theme = 2
+    m = re.search(r"top\s*(\d+)", user_input.lower())
+    if not m:
+        m = re.search(r"前(\d+)", user_input)
+    if m:
+        try:
+            top_k = int(m.group(1))
+        except Exception:
+            pass
+    m2 = re.search(r"每(题材|行业)[^\d]*(\d+)", user_input)
+    if m2:
+        try:
+            per_theme = int(m2.group(2))
+        except Exception:
+            pass
+    return query_hot_themes_default(top_k=top_k, per_theme=per_theme)
 
 
 def simple_agent_process(user_input, tools_dict):
@@ -257,6 +407,14 @@ def simple_agent_process(user_input, tools_dict):
     避免 LLM API 兼容性问题，确保 100% 可靠
     """
     user_lower = user_input.lower()
+
+    # 题材/行业 热点与龙头
+    if any(k in user_lower for k in ["题材", "热点", "行业", "板块", "龙头", "概念"]):
+        return query_hot_themes_from_text(user_input)
+
+    # 翻倍后旗型/平台（优先匹配）
+    if any(k in user_lower for k in ["翻倍", "旗型", "旗形", "旗", "平台整理", "旗型整理", "斜叠", "小幅回撤通道", "窄幅震荡"]):
+        return query_flag_platform_from_text(user_input)
     
     # 形态解析
     shape_keywords = ["形态", "k线", "锤子线", "吞没", "三连阳", "放量", "新高", "ma5", "ma20", "金叉", "突破", "十周", "10周", "涨60", "60%", "平台"]
@@ -338,6 +496,7 @@ def simple_agent_process(user_input, tools_dict):
         return """💡 请输入具体问题，例如:
   📊 现在市场怎么样?
   📈 今天有什么股票?
+  🔥 最强题材与龙头有哪些?
   ⚙️ 系统参数是什么?
   📉 历史表现怎么样?
   🔄 更新系统数据
@@ -382,12 +541,16 @@ def llm_agent_process(user_input, client, tools_dict):
 4. query_backtest_stats - 查询历史回测表现
 5. run_system_update - 执行系统数据更新
 6. help_command - 显示帮助信息
+7. query_flag_platform - 扫描‘翻倍后旗型/平台’，默认全市场+剔除ST
+8. query_hot_themes - 查询题材/行业热点与龙头（近20/5日）
 
 当用户问到市场、宽度、情绪等，调用 query_market_breadth。
 当用户问到股票、信号、订单、推荐等，调用 query_today_signals。
+当用户问到题材/行业/板块/龙头/概念等，调用 query_hot_themes。
 当用户问到参数、配置、调整等，调用 get_system_parameters。
 当用户问到回测、表现、历史等，调用 query_backtest_stats。
 当用户问到更新、重新等，调用 run_system_update。
+当用户提及 翻倍/旗型/平台整理/窄幅震荡 等，调用 query_flag_platform。
 
 请根据用户的问题，选择合适的工具来回答。"""
     
@@ -410,6 +573,12 @@ def llm_agent_process(user_input, client, tools_dict):
         
         # 形态选股（优先根据用户输入触发）
         lower_in = user_input.lower()
+        # 题材/行业 优先
+        if any(k in lower_in for k in ["题材", "热点", "行业", "板块", "龙头", "概念"]):
+            return query_hot_themes_from_text(user_input)
+        # 翻倍后旗型/平台（优先）
+        if any(k in lower_in for k in ["翻倍", "旗型", "旗形", "旗", "平台整理", "旗型整理", "斜叠", "小幅回撤通道", "窄幅震荡"]):
+            return query_flag_platform_from_text(user_input)
         if any(k in lower_in for k in ["形态", "k线", "锤子线", "吞没", "三连阳", "放量", "新高", "ma5", "ma20", "金叉", "突破", "十周", "10周", "涨60", "60%", "平台", "全部", "全市场", "全缓存", "全股票", "全部股票", "全量", "包含st", "保留st", "不剔除st", "含st"]):
             candidates = [
                 "锤子线",
@@ -463,8 +632,10 @@ def llm_agent_process(user_input, client, tools_dict):
 
         # 根据 LLM 的回应判断应该调用哪个工具
         llm_response_lower = llm_response.lower()
-        
-        if "query_market_breadth" in llm_response_lower or "市场宽度" in llm_response_lower:
+
+        if "query_hot_themes" in llm_response_lower or any(k in llm_response_lower for k in ["题材", "热点", "行业", "板块", "龙头", "概念"]):
+            result = tools_dict.get("query_hot_themes", lambda: "工具未找到")()
+        elif "query_market_breadth" in llm_response_lower or "市场宽度" in llm_response_lower:
             print("[LLM] 触发工具: query_market_breadth")
             result = tools_dict.get("query_market_breadth", lambda: "工具未找到")()
         elif "query_today_signals" in llm_response_lower or "交易信号" in llm_response_lower:
@@ -479,6 +650,8 @@ def llm_agent_process(user_input, client, tools_dict):
         elif "run_system_update" in llm_response_lower or "更新系统" in llm_response_lower:
             print("[LLM] 触发工具: run_system_update")
             result = tools_dict.get("run_system_update", lambda: "工具未找到")()
+        elif "query_flag_platform" in llm_response_lower or any(k in llm_response_lower for k in ["翻倍", "旗型", "平台整理", "窄幅震荡"]):
+            result = tools_dict.get("query_flag_platform", lambda: "工具未找到")()
         else:
             # LLM 直接回答用户
             print("[LLM] 直接回答用户")
