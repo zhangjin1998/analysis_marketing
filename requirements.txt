@@ -1,0 +1,7 @@
+akshare
+pandas>=1.5.0
+numpy
+scikit-learn
+lightgbm
+pytz
+python-dateutil
