@@ -74,8 +74,8 @@ def build_figure_index(index_code: str, days: int, metric: str, rebuild: bool, i
 		ser = _index_norm_series(index_code, ladder.index)
 
 	title_top = f"{index_code}{'（K线）' if index_style=='candle' else '（归一化）'}"
-	fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.06,
-				subplot_titles=(title_top, f"连板梯队：{metric}"))
+	fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
+					subplot_titles=(title_top, f"连板梯队：{metric}"), row_heights=[0.45, 0.55])
 	if index_style == 'candle' and idx is not None and not idx.empty:
 		fig.add_trace(
 			go.Candlestick(
@@ -86,6 +86,8 @@ def build_figure_index(index_code: str, days: int, metric: str, rebuild: bool, i
 			),
 			row=1, col=1
 		)
+		# 顶部K线去掉 rangeslider，避免遮挡
+		fig.update_layout(xaxis_rangeslider_visible=False)
 	else:
 		fig.add_trace(
 			go.Scatter(x=ser.index, y=ser.values, mode='lines', name=f'{index_code}', line=dict(color='#1f77b4')),
@@ -96,8 +98,8 @@ def build_figure_index(index_code: str, days: int, metric: str, rebuild: bool, i
 		go.Bar(x=ladder.index, y=ladder[metric].values, name=f'{metric}', marker_color='#d62728', opacity=0.8),
 		row=2, col=1
 	)
-	fig.update_layout(height=700, title=f"指数 vs 连板梯队（{index_code}, 最近{days}日, {metric}）",
-		legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1), margin=dict(l=40, r=20, t=60, b=40))
+	fig.update_layout(height=760, title=f"指数 vs 连板梯队（{index_code}, 最近{days}日, {metric}）",
+		legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1), margin=dict(l=60, r=40, t=80, b=60))
 	fig.update_yaxes(title_text='指数' if index_style=='candle' else '指数(归一)', row=1, col=1)
 	fig.update_yaxes(title_text=f'{metric}', row=2, col=1)
 	return fig
@@ -120,8 +122,8 @@ def build_figure_heatmap(days: int, rebuild: bool, max_level: int, share: bool, 
 	x = df.index
 	if with_index:
 		title_top = f"{index_code}{'（K线）' if index_style=='candle' else '（归一化）'}"
-		fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.06,
-					subplot_titles=(title_top, f"连板梯队热力图{title_suffix}"))
+		fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
+					subplot_titles=(title_top, f"连板梯队热力图{title_suffix}"), row_heights=[0.45, 0.55])
 		if index_style == 'candle':
 			idx = _load_index_df(index_code, x)
 			fig.add_trace(
@@ -132,16 +134,17 @@ def build_figure_heatmap(days: int, rebuild: bool, max_level: int, share: bool, 
 				),
 				row=1, col=1
 			)
+			fig.update_layout(xaxis_rangeslider_visible=False)
 		else:
 			ser = _index_norm_series(index_code, x)
 			fig.add_trace(go.Scatter(x=ser.index, y=ser.values, mode='lines', name=f'{index_code}', line=dict(color='#1f77b4')), row=1, col=1)
 		fig.add_trace(go.Heatmap(z=z, x=x, y=y_labels, colorscale='YlOrRd', colorbar=dict(title='强度')), row=2, col=1)
 		fig.update_yaxes(title_text=('指数' if index_style=='candle' else '指数(归一)'), row=1, col=1)
-		fig.update_layout(height=720)
+		fig.update_layout(height=780)
 	else:
 		fig = go.Figure(data=go.Heatmap(z=z, x=x, y=y_labels, colorscale='YlOrRd', colorbar=dict(title='强度')))
-		fig.update_layout(height=520)
-	fig.update_layout(title=f"连板梯队热力图{title_suffix}（最近{days}日）", margin=dict(l=40, r=20, t=60, b=40))
+		fig.update_layout(height=560)
+	fig.update_layout(title=f"连板梯队热力图{title_suffix}（最近{days}日）", margin=dict(l=60, r=40, t=80, b=60))
 	return fig
 
 
@@ -159,9 +162,9 @@ def build_figure_stacked(days: int, rebuild: bool, max_level: int, share: bool, 
 		y_title = '数量'
 	if with_index:
 		title_top = f"{index_code}{'（K线）' if index_style=='candle' else '（归一化）'}"
-		fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.06,
+		fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
 					subplot_titles=(title_top, f"连板梯队按层级堆叠柱{title_suffix}"),
-					specs=[[{}],[{"secondary_y": True}]])
+					specs=[[{}],[{"secondary_y": True}]], row_heights=[0.40, 0.60])
 		if index_style == 'candle':
 			idx = _load_index_df(index_code, df.index)
 			fig.add_trace(
@@ -172,6 +175,7 @@ def build_figure_stacked(days: int, rebuild: bool, max_level: int, share: bool, 
 				),
 				row=1, col=1
 			)
+			fig.update_layout(xaxis_rangeslider_visible=False)
 		else:
 			ser = _index_norm_series(index_code, df.index)
 			fig.add_trace(go.Scatter(x=ser.index, y=ser.values, mode='lines', name=f'{index_code}', line=dict(color='#1f77b4')), row=1, col=1)
@@ -189,21 +193,21 @@ def build_figure_stacked(days: int, rebuild: bool, max_level: int, share: bool, 
 	if with_max_line:
 		line = go.Scatter(
 			x=df.index, y=df['max_level_hit'].values, name='当日最高板', mode='lines+markers',
-			line=dict(color='#111111', width=3), marker=dict(size=7)
+			line=dict(color='#111111', width=3), marker=dict(size=8)
 		)
 		fig.add_trace(line, row=row2[0], col=row2[1], secondary_y=True)
 	# 坐标轴与布局
 	fig.update_layout(barmode='stack', title=f"连板梯队按层级堆叠柱{title_suffix}（最近{days}日）",
-		legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1), margin=dict(l=40, r=20, t=60, b=40))
+		legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1), margin=dict(l=60, r=40, t=80, b=60))
 	if with_index:
-		fig.update_layout(height=720)
+		fig.update_layout(height=780)
 		fig.update_yaxes(title_text=('指数' if index_style=='candle' else '指数(归一)'), row=1, col=1)
 		fig.update_yaxes(title_text=y_title, row=2, col=1, secondary_y=False)
-		fig.update_yaxes(title_text='最高板(级)', row=2, col=1, secondary_y=True, range=[0, max_level])
+		fig.update_yaxes(title_text='最高板(级)', row=2, col=1, secondary_y=True, range=[0, max_level + 0.5])
 	else:
-		fig.update_layout(height=560)
+		fig.update_layout(height=600)
 		fig.update_yaxes(title_text=y_title, row=1, col=1, secondary_y=False)
-		fig.update_yaxes(title_text='最高板(级)', row=1, col=1, secondary_y=True, range=[0, max_level])
+		fig.update_yaxes(title_text='最高板(级)', row=1, col=1, secondary_y=True, range=[0, max_level + 0.5])
 	return fig
 
 
