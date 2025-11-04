@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 
 from .patterns import list_cache_codes, _load_panel_from_cache
+from .config import get_with_env  # 新增
 
 THEME_KEYWORDS = [
 	("人工智能", ["AI","智","大模型","算力","数据要素","算法","语音","视觉","NLP","AIGC","Sora"]),
@@ -41,9 +42,9 @@ def get_stock_basic_cached(cache_csv: str = "data/meta/stock_basic.csv") -> pd.D
 			pass
 	# 拉取 TuShare 基础信息
 	import tushare as ts
-	token = os.environ.get('TUSHARE_TOKEN')
+	token = get_with_env('tushare.token', 'TUSHARE_TOKEN')
 	if not token:
-		raise RuntimeError("未设置 TUSHARE_TOKEN")
+		raise RuntimeError("未设置 TuShare Token（config.json:tushare.token 或环境变量 TUSHARE_TOKEN）")
 	pro = ts.pro_api(token)
 	basics = pro.stock_basic(exchange='', list_status='L', fields='ts_code,name,industry,list_date')
 	basics.to_csv(cache_csv, index=False, encoding='utf-8-sig')

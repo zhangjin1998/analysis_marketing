@@ -1,0 +1,18 @@
+{
+  "model": {
+    "name": "deepseek"
+  },
+  "deepseek": {
+    "api_key": "sk-3fdab051895d4f9583e944b1fc080195",
+    "base_url": "https://api.deepseek.com/v1",
+    "model": "deepseek-chat"
+  },
+  "openai": {
+    "api_key": "",
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-4o-mini"
+  },
+  "tushare": {
+    "token": "b09f3c651f9fa367d9861d845052e8b4bb461543980a2daad4fff9c7"
+  }
+}

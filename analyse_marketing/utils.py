@@ -7,11 +7,13 @@ import pandas as pd
 import tushare as ts
 import requests
 from glob import glob
+from src.config import get_with_env  # 新增
+
 
 def get_pro():
-    token = os.getenv('TUSHARE_TOKEN')
+    token = get_with_env('tushare.token', 'TUSHARE_TOKEN')
     if not token:
-        raise RuntimeError("请先设置环境变量 TUSHARE_TOKEN")
+        raise RuntimeError("请先在 config.json(tushare.token) 或环境变量 TUSHARE_TOKEN 中配置 TuShare Token")
     return ts.pro_api(token)
 
 def ensure_dir(path: str):

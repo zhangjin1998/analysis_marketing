@@ -7,6 +7,7 @@
 
 import os
 from typing import Optional, Dict, Any
+from src.config import get_with_env, get_config_value  # 新增
 
 
 # ========== 模型配置 ==========
@@ -15,9 +16,9 @@ MODEL_CONFIGS = {
     # 🇨🇳 DeepSeek (国内，最便宜，质量接近 GPT-4)
     "deepseek": {
         "provider": "openai",  # OpenAI 兼容 API
-        "api_key": os.getenv("DEEPSEEK_API_KEY"),
-        "base_url": "https://api.deepseek.com/v1",
-        "model": "deepseek-chat",
+        "api_key": get_with_env("deepseek.api_key", "DEEPSEEK_API_KEY"),
+        "base_url": get_with_env("deepseek.base_url", "DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
+        "model": get_with_env("deepseek.model", "DEEPSEEK_MODEL", "deepseek-chat"),
         "temperature": 0.3,
         "max_tokens": 2000,
         "cost": "$0 (¥500免费)",
@@ -29,9 +30,9 @@ MODEL_CONFIGS = {
     # 🌍 OpenAI (国际标准，质量最好)
     "openai": {
         "provider": "openai",
-        "api_key": os.getenv("OPENAI_API_KEY"),
-        "base_url": "https://api.openai.com/v1",
-        "model": "gpt-3.5-turbo",
+        "api_key": get_with_env("openai.api_key", "OPENAI_API_KEY"),
+        "base_url": get_with_env("openai.base_url", "OPENAI_BASE_URL", "https://api.openai.com/v1"),
+        "model": get_with_env("openai.model", "OPENAI_MODEL", "gpt-3.5-turbo"),
         "temperature": 0.3,
         "max_tokens": 2000,
         "cost": "$5-20/月",
@@ -43,9 +44,9 @@ MODEL_CONFIGS = {
     # 🇨🇳 阿里通义千问 (免费额度，快速)
     "qwen": {
         "provider": "openai",
-        "api_key": os.getenv("QWEN_API_KEY"),
-        "base_url": "https://dashscope.aliyuncs.com/api/v1",
-        "model": "qwen-plus",
+        "api_key": get_with_env("qwen.api_key", "QWEN_API_KEY"),
+        "base_url": get_with_env("qwen.base_url", "QWEN_BASE_URL", "https://dashscope.aliyuncs.com/api/v1"),
+        "model": get_with_env("qwen.model", "QWEN_MODEL", "qwen-plus"),
         "temperature": 0.3,
         "max_tokens": 2000,
         "cost": "$0 (免费额度)",
@@ -57,9 +58,9 @@ MODEL_CONFIGS = {
     # 🇨🇳 讯飞星火 (成本低，支持长文本)
     "spark": {
         "provider": "openai",
-        "api_key": os.getenv("SPARK_API_KEY"),
-        "base_url": "https://spark-api.xf-yun.com/v1",
-        "model": "4.0Ultra",
+        "api_key": get_with_env("spark.api_key", "SPARK_API_KEY"),
+        "base_url": get_with_env("spark.base_url", "SPARK_BASE_URL", "https://spark-api.xf-yun.com/v1"),
+        "model": get_with_env("spark.model", "SPARK_MODEL", "4.0Ultra"),
         "temperature": 0.3,
         "max_tokens": 2000,
         "cost": "$$ 低",
@@ -71,9 +72,9 @@ MODEL_CONFIGS = {
     # 🇨🇳 百度文心一言 (功能完整)
     "baidu": {
         "provider": "baidu",
-        "api_key": os.getenv("BAIDU_API_KEY"),
-        "base_url": "https://aip.baidubce.com/rpc/2.0",
-        "model": "ernie-bot-4",
+        "api_key": get_with_env("baidu.api_key", "BAIDU_API_KEY"),
+        "base_url": get_with_env("baidu.base_url", "BAIDU_BASE_URL", "https://aip.baidubce.com/rpc/2.0"),
+        "model": get_with_env("baidu.model", "BAIDU_MODEL", "ernie-bot-4"),
         "temperature": 0.3,
         "max_tokens": 2000,
         "cost": "$ 低",
@@ -85,9 +86,9 @@ MODEL_CONFIGS = {
     # 🇨🇳 Claude (Anthropic，推理能力最强)
     "claude": {
         "provider": "anthropic",
-        "api_key": os.getenv("ANTHROPIC_API_KEY"),
-        "base_url": "https://api.anthropic.com",
-        "model": "claude-3-5-sonnet-20241022",
+        "api_key": get_with_env("claude.api_key", "ANTHROPIC_API_KEY"),
+        "base_url": get_with_env("claude.base_url", "ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
+        "model": get_with_env("claude.model", "ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022"),
         "temperature": 0.3,
         "max_tokens": 2000,
         "cost": "$$$ 中",
@@ -127,7 +128,7 @@ def get_llm(model_name: str = "deepseek"):
     if not config["api_key"]:
         raise ValueError(
             f"❌ 缺少 API Key: {model_name}\n"
-            f"请在 .env 中设置: {config['provider'].upper()}_API_KEY"
+            f"请在 config.json 中配置对应字段，或设置环境变量 {model_name.upper()}_API_KEY"
         )
     
     # 根据提供商创建 LLM 实例
@@ -205,12 +206,10 @@ def check_models():
 
 def get_default_model():
     """获取默认模型"""
-    model_name = os.getenv("TRADING_MODEL", "deepseek")
-    return model_name
+    return get_with_env("model.name", "TRADING_MODEL", "deepseek")
 
 
 # ========== 主函数示例 ==========
-
 if __name__ == "__main__":
     import sys
     
