@@ -33,6 +33,11 @@ from src.risk import position_scale
 from src.patterns import detect_patterns_on_candidates, detect_patterns_on_all, format_pattern_result
 from src.patterns_flag import scan_flag_platform_all  # 新增
 from src.themes import top_themes_with_leaders  # 新增
+from scripts.plotly_ladder_vs_index import (
+    build_figure_heatmap as build_ladder_heatmap,
+    build_figure_stacked as build_ladder_stacked,
+    build_figure_index as build_ladder_index,
+)  # 新增
 
 # 加载环境变量
 load_dotenv()
@@ -257,6 +262,16 @@ def create_trading_agent():
             func=lambda: query_hot_themes_default(),
             description="查询题材/行业热点与龙头（近20/5日按中位收益排序）"
         ),
+        Tool(
+            name="plot_ladder_heatmap",
+            func=lambda: plot_ladder_heatmap_default(),
+            description="生成 连板梯队 热力图（带指数）HTML，默认上证120天、8层级、占比+K线"
+        ),
+        Tool(
+            name="plot_ladder_stacked",
+            func=lambda: plot_ladder_stacked_default(),
+            description="生成 连板梯队 按层级堆叠柱（带指数+最高板折线）HTML"
+        ),
     ]
     
     # 返回 (llm, tools, 用于后续处理)
@@ -401,6 +416,105 @@ def query_hot_themes_from_text(user_input: str) -> str:
     return query_hot_themes_default(top_k=top_k, per_theme=per_theme)
 
 
+def _map_index_text_to_code(text: str) -> str:
+    t = text.lower()
+    if any(k in t for k in ["上证", "上证指数", "沪指", "000001.sh", "sh000001", "上证综指"]):
+        return "000001.SH"
+    if any(k in t for k in ["深成", "深证成指", "399001.sz", "sz399001"]):
+        return "399001.SZ"
+    if any(k in t for k in ["创业板", "创业板指", "399006.sz", "sz399006", "创业"]):
+        return "399006.SZ"
+    return "000001.SH"
+
+
+def _parse_days(text: str, default_days: int = 120) -> int:
+    import re
+    m = re.search(r"(近|最近)?\s*(\d{2,3})\s*天", text)
+    if m:
+        try:
+            return int(m.group(2))
+        except Exception:
+            pass
+    m2 = re.search(r"top\s*(\d{2,3})", text.lower())
+    if m2:
+        try:
+            return int(m2.group(1))
+        except Exception:
+            pass
+    return default_days
+
+
+def plot_ladder_heatmap_default() -> str:
+    try:
+        idx = "000001.SH"
+        days = 120
+        max_level = 8
+        share = True
+        with_index = True
+        index_style = "candle"
+        fig = build_ladder_heatmap(days=days, rebuild=False, max_level=max_level, share=share, with_index=with_index, index_code=idx, index_style=index_style)
+        Path('data/plots').mkdir(parents=True, exist_ok=True)
+        out = f"data/plots/ladder_heatmap_with_index_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+        fig.write_html(out, include_plotlyjs='cdn', full_html=True)
+        return f"✅ 已生成: {out}"
+    except Exception as e:
+        return f"❌ 生成失败: {e}"
+
+
+def plot_ladder_stacked_default() -> str:
+    try:
+        idx = "000001.SH"
+        days = 120
+        max_level = 8
+        share = False
+        with_max_line = True
+        with_index = True
+        index_style = "candle"
+        fig = build_ladder_stacked(days=days, rebuild=False, max_level=max_level, share=share, with_max_line=with_max_line, with_index=with_index, index_code=idx, index_style=index_style)
+        Path('data/plots').mkdir(parents=True, exist_ok=True)
+        out = f"data/plots/ladder_stacked_with_index_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+        fig.write_html(out, include_plotlyjs='cdn', full_html=True)
+        return f"✅ 已生成: {out}"
+    except Exception as e:
+        return f"❌ 生成失败: {e}"
+
+
+def plot_ladder_heatmap_from_text(user_input: str) -> str:
+    try:
+        idx = _map_index_text_to_code(user_input)
+        days = _parse_days(user_input, 120)
+        max_level = 8
+        share = ("占比" in user_input) or ("比例" in user_input) or ("share" in user_input.lower())
+        with_index = True
+        index_style = "candle" if ("k线" in user_input.lower() or "蜡烛" in user_input or "candle" in user_input.lower()) else "line"
+        fig = build_ladder_heatmap(days=days, rebuild=False, max_level=max_level, share=share, with_index=with_index, index_code=idx, index_style=index_style)
+        Path('data/plots').mkdir(parents=True, exist_ok=True)
+        tag = f"{idx.replace('.','_')}_{'share' if share else 'count'}_{index_style}"
+        out = f"data/plots/ladder_heatmap_{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+        fig.write_html(out, include_plotlyjs='cdn', full_html=True)
+        return f"✅ 热力图已生成: {out}"
+    except Exception as e:
+        return f"❌ 生成失败: {e}"
+
+
+def plot_ladder_stacked_from_text(user_input: str) -> str:
+    try:
+        idx = _map_index_text_to_code(user_input)
+        days = _parse_days(user_input, 120)
+        max_level = 8
+        share = ("占比" in user_input) or ("比例" in user_input)
+        with_max_line = True
+        with_index = True
+        index_style = "candle" if ("k线" in user_input.lower() or "蜡烛" in user_input or "candle" in user_input.lower()) else "line"
+        fig = build_ladder_stacked(days=days, rebuild=False, max_level=max_level, share=share, with_max_line=with_max_line, with_index=with_index, index_code=idx, index_style=index_style)
+        Path('data/plots').mkdir(parents=True, exist_ok=True)
+        tag = f"{idx.replace('.','_')}_{'share' if share else 'count'}_{index_style}"
+        out = f"data/plots/ladder_stacked_{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+        fig.write_html(out, include_plotlyjs='cdn', full_html=True)
+        return f"✅ 堆叠图已生成: {out}"
+    except Exception as e:
+        return f"❌ 生成失败: {e}"
+
 def simple_agent_process(user_input, tools_dict):
     """
     简单 Agent 处理：用关键词匹配直接调用工具
@@ -411,6 +525,13 @@ def simple_agent_process(user_input, tools_dict):
     # 题材/行业 热点与龙头
     if any(k in user_lower for k in ["题材", "热点", "行业", "板块", "龙头", "概念"]):
         return query_hot_themes_from_text(user_input)
+
+    # 连板梯队图表
+    if ("连板" in user_input) or ("梯队" in user_input):
+        if ("热力图" in user_input) or ("heatmap" in user_lower):
+            return plot_ladder_heatmap_from_text(user_input)
+        if any(k in user_lower for k in ["堆叠", "stack", "柱"]):
+            return plot_ladder_stacked_from_text(user_input)
 
     # 翻倍后旗型/平台（优先匹配）
     if any(k in user_lower for k in ["翻倍", "旗型", "旗形", "旗", "平台整理", "旗型整理", "斜叠", "小幅回撤通道", "窄幅震荡"]):
@@ -543,6 +664,8 @@ def llm_agent_process(user_input, client, tools_dict):
 6. help_command - 显示帮助信息
 7. query_flag_platform - 扫描‘翻倍后旗型/平台’，默认全市场+剔除ST
 8. query_hot_themes - 查询题材/行业热点与龙头（近20/5日）
+9. plot_ladder_heatmap - 生成连板热力图（可带指数K线）
+10. plot_ladder_stacked - 生成连板堆叠柱（可带指数K线+最高板线）
 
 当用户问到市场、宽度、情绪等，调用 query_market_breadth。
 当用户问到股票、信号、订单、推荐等，调用 query_today_signals。
@@ -551,6 +674,7 @@ def llm_agent_process(user_input, client, tools_dict):
 当用户问到回测、表现、历史等，调用 query_backtest_stats。
 当用户问到更新、重新等，调用 run_system_update。
 当用户提及 翻倍/旗型/平台整理/窄幅震荡 等，调用 query_flag_platform。
+当用户提及 连板/梯队 + 热力图/堆叠/指数/K线 等，调用相应的 plot_ladder_* 工具。
 
 请根据用户的问题，选择合适的工具来回答。"""
     
@@ -576,6 +700,12 @@ def llm_agent_process(user_input, client, tools_dict):
         # 题材/行业 优先
         if any(k in lower_in for k in ["题材", "热点", "行业", "板块", "龙头", "概念"]):
             return query_hot_themes_from_text(user_input)
+        # 连板梯队图表
+        if ("连板" in user_input) or ("梯队" in user_input):
+            if ("热力图" in user_input) or ("heatmap" in lower_in):
+                return plot_ladder_heatmap_from_text(user_input)
+            if any(k in lower_in for k in ["堆叠", "stack", "柱"]):
+                return plot_ladder_stacked_from_text(user_input)
         # 翻倍后旗型/平台（优先）
         if any(k in lower_in for k in ["翻倍", "旗型", "旗形", "旗", "平台整理", "旗型整理", "斜叠", "小幅回撤通道", "窄幅震荡"]):
             return query_flag_platform_from_text(user_input)
@@ -652,6 +782,10 @@ def llm_agent_process(user_input, client, tools_dict):
             result = tools_dict.get("run_system_update", lambda: "工具未找到")()
         elif "query_flag_platform" in llm_response_lower or any(k in llm_response_lower for k in ["翻倍", "旗型", "平台整理", "窄幅震荡"]):
             result = tools_dict.get("query_flag_platform", lambda: "工具未找到")()
+        elif "plot_ladder_heatmap" in llm_response_lower or ("连板" in llm_response_lower and ("热力图" in llm_response_lower or "heatmap" in llm_response_lower)):
+            result = tools_dict.get("plot_ladder_heatmap", lambda: "工具未找到")()
+        elif "plot_ladder_stacked" in llm_response_lower or ("连板" in llm_response_lower and any(k in llm_response_lower for k in ["堆叠", "stack", "柱"])):
+            result = tools_dict.get("plot_ladder_stacked", lambda: "工具未找到")()
         else:
             # LLM 直接回答用户
             print("[LLM] 直接回答用户")

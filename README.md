@@ -396,3 +396,100 @@ MIT License - 开源免费使用
 
 **版本：** v0.1.0 | **更新：** 2024-10  
 **作者社区：** A股量化交易爱好者
+
+---
+
+## 🧩 本仓库增强说明（Agent 与连板梯队可视化）
+
+本项目已集成以下增强功能，默认输出目录在 `data/plots/` 与 `data/patterns/`：
+
+### 1) JSON 配置（优先于环境变量）
+
+在仓库根目录创建 `config.json`（或设置 `A_SHARE_AGENT_CONFIG` 指向自定义路径）。示例：
+
+```json
+{
+  "model": { "name": "deepseek" },
+  "deepseek": {
+    "api_key": "sk-xxxx",
+    "base_url": "https://api.deepseek.com/v1",
+    "model": "deepseek-chat"
+  },
+  "tushare": {
+    "token": "your_tushare_token"
+  }
+}
+```
+
+读取优先级：`config.json`/`A_SHARE_AGENT_CONFIG` > 环境变量 > 默认值。
+
+### 2) Agent 新指令
+
+已接入以下自然语言指令，进入交互后直接输入（`python3 scripts/run_agent.py`）：
+
+- 题材+龙头
+- 连板 热力图 120天 指数 上证 K线
+- 连板 堆叠 120天 指数 创业板 含最高板
+- 连板 热力图 近90天 占比 指数 深成指
+
+功能说明：
+- 自动解析指数：上证→`000001.SH`，深成指→`399001.SZ`，创业板→`399006.SZ`
+- 默认参数：`days=120`、`max_level=8`、带指数、K线样式；堆叠图含“当日最高板”折线（次坐标轴放大显示）
+- 关键词：`热力图/堆叠/K线/蜡烛/占比/比例/近N天/NN天`
+- 结果为 HTML 文件，路径将直接在 Agent 回复中返回
+
+涉及的工具（LLM/关键词两路触发）：
+- `plot_ladder_heatmap`：连板梯队热力图（可带指数K线）
+- `plot_ladder_stacked`：连板梯队按层级堆叠柱（可带指数K线 + 最高板折线）
+- `query_hot_themes`：题材/行业热点与龙头
+- `query_flag_platform`：翻倍后旗型/平台扫描（CSV 导出）
+
+### 3) Plotly 连板梯队脚本（命令行）
+
+脚本：`scripts/plotly_ladder_vs_index.py`
+
+常用示例：
+
+```bash
+# 热力图（占比） + 指数K线（红涨绿跌）
+python3 scripts/plotly_ladder_vs_index.py \
+  --mode heatmap --with-index --index-style candle \
+  --index 000001.SH --days 120 --max-level 8 --share \
+  --out data/plots/ladder_heatmap_with_index_candle.html
+
+# 堆叠柱（含“最高板”折线，次轴放大） + 指数K线
+python3 scripts/plotly_ladder_vs_index.py \
+  --mode stacked --with-index --index-style candle --with-max-line \
+  --index 399006.SZ --days 120 --max-level 8 \
+  --out data/plots/ladder_stacked_with_index_candle.html
+```
+
+关键参数：
+- `--mode`：`index | heatmap | stacked`
+- `--index`：指数代码（上证 `000001.SH`、深成指 `399001.SZ`、创业板 `399006.SZ`）
+- `--with-index`：在热力图/堆叠图上方叠加指数
+- `--index-style`：`line | candle`（K线红涨绿跌）
+- `--days`：时间窗口（最近 N 天）
+- `--max-level`：最大展示层级，额外一层为 `max-level+`
+- `--share`：使用占比而非数量
+- `--with-max-line`：堆叠图叠加“当日最高板”折线（次坐标轴）
+- `--rebuild`：首次或需重算缓存时指定
+
+输出：交互式 HTML，位于 `data/plots/`。
+
+### 4) 题材/龙头与回退机制
+
+题材榜默认通过 TuShare `stock_basic` 的行业映射聚合；当配额受限时，回退到候选池名称关键词聚类（常见主题词已内置）。
+
+命令行测试：
+
+```bash
+python3 - << 'PY'
+from src.themes import top_themes_with_leaders
+print(top_themes_with_leaders(top_k=5, per_theme=2))
+PY
+```
+
+---
+
+如需把三大指数做成单页下拉切换，或调整上下区域占比/右轴范围等，欢迎提 Issue。以上能力均已接入 Agent 与脚本，开箱即用。
